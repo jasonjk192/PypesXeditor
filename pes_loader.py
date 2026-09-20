@@ -111,7 +111,7 @@ def get_descriptor(dll_lib, version):
     elif version_type == "New":
         _get_descriptorNew(dll_lib, version)
 
-def load_savefile17(dll_lib):
+def load_savefile17(dll_lib, optional_savefile_path=None):
     dll_lib.editor_loadData17.argtypes = [
         ctypes.c_char_p,
         ctypes.POINTER(ctypes.POINTER(pes_data.FileDescriptorOld)),
@@ -127,14 +127,17 @@ def load_savefile17(dll_lib):
     teams = ctypes.POINTER(pes_data.editor_team_entry)()
     num_players = ctypes.c_uint32()
     num_teams = ctypes.c_uint32()
-    encoded_path = pes_data.savefile_path.encode('utf-8')
+    path_to_encode = optional_savefile_path if optional_savefile_path is not None else pes_data.savefile_path
+    encoded_path = path_to_encode.encode('utf-8')
 
+    #ucrt = ctypes.CDLL('ucrtbase')
     result = dll_lib.editor_loadData17(encoded_path, ctypes.byref(descriptor), ctypes.byref(players), ctypes.byref(num_players), ctypes.byref(teams), ctypes.byref(num_teams))
+    #ucrt.fflush(None) 
     if result != pes_data.OpResult.OK:
         raise RuntimeError(f"editor_loadData17 failed: {pes_data.OpResult(result).name}")
     return pes_data.SaveDataOld(descriptor=descriptor, players=players, num_players=num_players, teams=teams, num_teams=num_teams)
   
-def save_savefile17(dll_lib, descriptor, players, teams):
+def save_savefile17(dll_lib, descriptor, players, teams, optional_savefile_path=None):
     dll_lib.editor_saveData17.argtypes = [
         ctypes.c_char_p,
         ctypes.POINTER(pes_data.FileDescriptorOld),
@@ -142,7 +145,8 @@ def save_savefile17(dll_lib, descriptor, players, teams):
         ctypes.POINTER(pes_data.editor_team_entry)
     ]
     dll_lib.editor_saveData17.restype = ctypes.c_int
-    encoded_path = pes_data.savefile_path.encode('utf-8')
+    path_to_encode = optional_savefile_path if optional_savefile_path is not None else pes_data.savefile_path
+    encoded_path = path_to_encode.encode('utf-8')
     
     result = dll_lib.editor_saveData17(encoded_path, descriptor, players, teams)
     if result != pes_data.OpResult.OK:
@@ -165,3 +169,146 @@ def unload_descriptor(dll_lib, descriptor, version):
         _unload_descriptorOld(dll_lib, descriptor)
     elif version_type == "New":
         _unload_descriptorNew(dll_lib, descriptor)
+        
+#####################################
+
+def free_cache(dll_lib, cache):
+    dll_lib.editor_freeCache.argtypes = [pes_data.EditorCache]
+    dll_lib.editor_freeCache.restype = None
+    dll_lib.editor_freeCache(cache)
+
+def build_cache(dll_lib, players, num_players, teams, num_teams):
+    out_cache = pes_data.EditorCache()
+    dll_lib.editor_buildCache.argtypes = [
+        ctypes.POINTER(pes_data.editor_player_entry),
+        ctypes.c_uint32,
+        ctypes.POINTER(pes_data.editor_team_entry),
+        ctypes.c_uint32,
+        ctypes.POINTER(pes_data.EditorCache), 
+    ]
+    dll_lib.editor_buildCache.restype = ctypes.c_int
+    result = dll_lib.editor_buildCache(players, num_players, teams, num_teams, ctypes.byref(out_cache))
+    return result, out_cache
+
+def player_index_by_id(dll_lib, cache, player_id):
+    out_index = ctypes.c_uint32()
+    dll_lib.editor_playerIndexByID.argtypes = [
+        pes_data.EditorCache,
+        ctypes.c_uint32,  
+        ctypes.POINTER(ctypes.c_uint32),
+    ]
+    dll_lib.editor_playerIndexByID.restype = ctypes.c_int
+    result = dll_lib.editor_playerIndexByID(cache, player_id, ctypes.byref(out_index))
+    return result, out_index.value
+
+def team_index_by_id(dll_lib, cache, team_id):
+    out_index = ctypes.c_uint32()
+    dll_lib.editor_teamIndexByID.argtypes = [
+        pes_data.EditorCache,
+        ctypes.c_uint32,        
+        ctypes.POINTER(ctypes.c_uint32), 
+    ]
+    dll_lib.editor_teamIndexByID.restype = ctypes.c_int
+    result = dll_lib.editor_teamIndexByID(cache, team_id, ctypes.byref(out_index))
+    return result, out_index.value
+
+def player_indices_by_ids(dll_lib, cache, player_ids):
+    count = len(player_ids)
+    ids = (ctypes.c_uint32 * count)(*player_ids)
+    out_indices = (ctypes.c_uint32 * count)()
+    dll_lib.editor_playerIndicesByIDs.argtypes = [
+        pes_data.EditorCache,
+        ctypes.POINTER(ctypes.c_uint32),
+        ctypes.c_uint32,          
+        ctypes.POINTER(ctypes.c_uint32),
+    ]
+    dll_lib.editor_playerIndicesByIDs.restype = ctypes.c_int
+    result = dll_lib.editor_playerIndicesByIDs(cache, ids, count, out_indices)
+    return result, list(out_indices)
+
+def team_indices_by_ids(dll_lib, cache, team_ids):
+    count = len(team_ids)
+    ids = (ctypes.c_uint32 * count)(*team_ids)
+    out_indices = (ctypes.c_uint32 * count)()
+    dll_lib.editor_teamIndicesByIDs.argtypes = [
+        pes_data.EditorCache,
+        ctypes.POINTER(ctypes.c_uint32),
+        ctypes.c_uint32,      
+        ctypes.POINTER(ctypes.c_uint32),
+    ]
+    dll_lib.editor_teamIndicesByIDs.restype = ctypes.c_int
+    result = dll_lib.editor_teamIndicesByIDs(cache, ids, count, out_indices)
+    return result, list(out_indices)
+
+def get_team_player_indices(dll_lib, cache, team, max_count):
+    out_indices = (ctypes.c_uint32 * max_count)()
+    out_count = ctypes.c_uint32()
+    dll_lib.editor_getTeamPlayerIndices.argtypes = [
+        pes_data.EditorCache,
+        ctypes.POINTER(pes_data.editor_team_entry),
+        ctypes.POINTER(ctypes.c_uint32),
+        ctypes.POINTER(ctypes.c_uint32),
+    ]
+    dll_lib.editor_getTeamPlayerIndices.restype = ctypes.c_int
+    result = dll_lib.editor_getTeamPlayerIndices(cache, team, out_indices, ctypes.byref(out_count))
+    return result, list(out_indices[:out_count.value])
+
+def get_team_starting11_player_indices(dll_lib, cache, team, max_count=11):
+    out_indices = (ctypes.c_uint32 * max_count)()
+    out_count = ctypes.c_uint32()
+    dll_lib.editor_getTeamStarting11PlayerIndices.argtypes = [
+        pes_data.EditorCache,
+        ctypes.POINTER(pes_data.editor_team_entry),
+        ctypes.POINTER(ctypes.c_uint32),
+        ctypes.POINTER(ctypes.c_uint32),
+    ]
+    dll_lib.editor_getTeamStarting11PlayerIndices.restype = ctypes.c_int
+    result = dll_lib.editor_getTeamStarting11PlayerIndices(cache, team, out_indices, ctypes.byref(out_count))
+    return result, list(out_indices[:out_count.value])
+    
+#####################################
+    
+def export_player_csv(dll_lib, player_id, players, cache, path):
+    dll_lib.editor_export_player_csv.argtypes = [
+        ctypes.c_uint32,
+        ctypes.POINTER(pes_data.editor_player_entry),
+        pes_data.EditorCache, 
+        ctypes.c_char_p,
+    ]
+    dll_lib.editor_export_player_csv.restype = ctypes.c_int
+    result = dll_lib.editor_export_player_csv(player_id, players, cache, path)
+    return result
+    
+def export_team_players_csv(dll_lib, team_id, teams, players, cache, path):
+    dll_lib.editor_export_team_players_csv.argtypes = [
+        ctypes.c_uint32,
+        ctypes.POINTER(pes_data.editor_team_entry),
+        ctypes.POINTER(pes_data.editor_player_entry),
+        pes_data.EditorCache, 
+        ctypes.c_char_p,
+    ]
+    dll_lib.editor_export_team_players_csv.restype = ctypes.c_int
+    result = dll_lib.editor_export_team_players_csv(team_id, teams, players, cache, path)
+    return result
+    
+def export_team_starting11_csv(dll_lib, team_id, teams, players, cache, path):
+    dll_lib.editor_export_team_starting11_csv.argtypes = [
+        ctypes.c_uint32,
+        ctypes.POINTER(pes_data.editor_team_entry),
+        ctypes.POINTER(pes_data.editor_player_entry),
+        pes_data.EditorCache, 
+        ctypes.c_char_p,
+    ]
+    dll_lib.editor_export_team_starting11_csv.restype = ctypes.c_int
+    result = dll_lib.editor_export_team_starting11_csv(team_id, teams, players, cache, path)
+    return result
+    
+def import_players_csv(dll_lib, players, cache, path):
+    dll_lib.editor_import_players_csv.argtypes = [
+        ctypes.POINTER(pes_data.editor_player_entry),
+        pes_data.EditorCache, 
+        ctypes.c_char_p,
+    ]
+    dll_lib.editor_import_players_csv.restype = ctypes.c_int
+    result = dll_lib.editor_import_players_csv(players, cache, path)
+    return result

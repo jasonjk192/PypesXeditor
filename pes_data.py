@@ -333,3 +333,5 @@ def _get_document_dir():
 
 dll_lib_path = ".\\pesXeditor.dll"
 savefile_path = _get_document_dir()+"\\KONAMI\\Pro Evolution Soccer 2017\\save\\EDIT00000000"
+
+EditorCache = ctypes.c_void_p

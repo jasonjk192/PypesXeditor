@@ -17,7 +17,7 @@ except ImportError:
 class PESXEditor(ABC):
     VERSION = None
 
-    def __init__(self):
+    def __init__(self, optional_savefile_path=None):
         self.dll_lib = pes_loader.load_dll()
 
         self.descriptor = None
@@ -35,8 +35,10 @@ class PESXEditor(ABC):
         
         self._original_players = None
         self._original_teams = None
+        
+        self._cache = None
 
-        result = self._load_savefile()
+        result = self._load_savefile(optional_savefile_path)
 
         if result is None:
             # Since we already loaded the DLL, clean it up if appropriate.
@@ -49,14 +51,15 @@ class PESXEditor(ABC):
         self.teams = result.teams
         self.num_teams = result.num_teams
         self._take_snapshots()
+        self._build_cache()
 
     @abstractmethod
-    def _load_savefile(self):
+    def _load_savefile(self, optional_savefile_path=None):
         """Load version-specific save data."""
         pass
         
     @abstractmethod
-    def _save_savefile(self):
+    def _save_savefile(self, optional_savefile_path=None):
         """Save version-specific save data."""
         pass
 
@@ -87,6 +90,9 @@ class PESXEditor(ABC):
 
         if self.players is not None or self.teams is not None:
             pes_loader.unload_savefile_data(self.dll_lib, self.players, self.teams)
+            
+        if self._cache is not None:
+            self._free_cache()
 
         self.players = None
         self.teams = None
@@ -100,7 +106,8 @@ class PESXEditor(ABC):
         
         self._original_players = None
         self._original_teams = None
-
+        
+        self._cache = None
 
     def _cleanup_failed_init(self):
         """Cleanup resources if __init__ fails partway through."""
@@ -158,6 +165,13 @@ class PESXEditor(ABC):
     def _update_changed_flags(self):
         self._mark_changed(self.players, self._original_players)
         self._mark_changed(self.teams, self._original_teams)
+        
+    def _build_cache(self):
+        result = pes_loader.build_cache(self.dll_lib, self.players, self.num_players, self.teams, self.num_teams)
+        self._cache = result[1]
+    
+    def _free_cache(self):
+        pes_loader.free_cache(self.dll_lib, self._cache)
     
     @property
     def players_numpy(self):
@@ -184,39 +198,49 @@ class PESXEditor(ABC):
         pes_schema.numpy_to_ctypes(self.teams, self.num_teams.value, self._teams_numpy, pes_schema.TEAM_SCHEMA)
         
     def get_team_index_by_id(self, team_id):
-        # incomplete! Need to redo due to inefficient code
-        for index, team in enumerate(self.teams):
-            if team.id == team_id:
-                return index
-        return None
+        result = pes_loader.team_index_by_id(self.dll_lib, self._cache, team_id)
+        return result[1]
+        
+    def get_player_index_by_id(self, player_id):
+        result = pes_loader.player_index_by_id(self.dll_lib, self._cache, player_id)
+        return result[1]
 
     def get_player_indices_by_ids(self, player_ids):
-        # incomplete! Need to redo due to inefficient code
-        player_ids = set(player_ids)
-        return [
-            index
-            for index, player in enumerate(self.players)
-            if player.id in player_ids
-        ]
+        result = pes_loader.player_indices_by_ids(self.dll_lib, self._cache, player_ids)
+        return result[1]
+        
+    def get_team_indices_by_ids(self, team_ids):
+        result = pes_loader.team_indices_by_ids(self.dll_lib, self._cache, team_ids)
+        return result[1]
 
     def get_team_player_indices(self, team_id):
-        # incomplete! Need to redo due to inefficient code
-        team_index = self.get_team_index_by_id(team_id)
-        if team_index is None:
-            return []
-
-        team = self.teams[team_index]
-        player_ids = team.players[:team.num_on_team]
-        return self.get_player_indices_by_ids(player_ids)
+        result = pes_loader.get_team_player_indices(self.dll_lib, self._cache, self.teams[self.get_team_index_by_id(team_id)], 40)
+        return result[1]
+    
+    def get_team_starting11_player_indices(self, team_id):
+        result = pes_loader.get_team_starting11_player_indices(self.dll_lib, self._cache, self.teams[self.get_team_index_by_id(team_id)], 11);
+        return result[1]
+        
+    def export_player_csv(self, player_id, path):
+        result = pes_loader.export_player_csv(self.dll_lib, player_id, self.players, self._cache, path)
+        
+    def export_team_players_csv(self, team_id, path):
+        result = pes_loader.export_team_players_csv(self.dll_lib, team_id, self.teams, self.players, self._cache, path)
+        
+    def export_team_starting11_csv(self, team_id, path):
+        result = pes_loader.export_team_starting11_csv(self.dll_lib, team_id, self.teams, self.players, self._cache, path)
+        
+    def import_players_csv(self, path):
+        result = pes_loader.import_players_csv(self.dll_lib, self.players, self._cache, path)
     
 class PES17Editor(PESXEditor):
     VERSION = 17
 
-    def _load_savefile(self):
-        return pes_loader.load_savefile17(self.dll_lib)
+    def _load_savefile(self, optional_savefile_path=None):
+        return pes_loader.load_savefile17(self.dll_lib, optional_savefile_path)
 
     def _unload_descriptor(self):
         pes_loader.unload_descriptor(self.dll_lib, self.descriptor, self.VERSION)
         
-    def _save_savefile(self):
-        return pes_loader.save_savefile17(self.dll_lib, self.descriptor, self.players, self.teams)
+    def _save_savefile(self, optional_savefile_path=None):
+        return pes_loader.save_savefile17(self.dll_lib, self.descriptor, self.players, self.teams, optional_savefile_path)
