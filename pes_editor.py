@@ -224,6 +224,15 @@ class PESXEditor(ABC):
     def export_player_csv(self, player_id, path):
         result = pes_loader.export_player_csv(self.dll_lib, player_id, self.players, self._cache, path)
         
+    def export_players_csv(self, player_ids, path):
+        result = pes_loader.export_players_csv(self.dll_lib, player_ids, self.players, self._cache, path)
+        
+    def export_team_csv(self, team_id, path):
+        result = pes_loader.export_team_csv(self.dll_lib, team_id, self.teams, self._cache, path)
+        
+    def export_teams_csv(self, team_ids, path):
+        result = pes_loader.export_teams_csv(self.dll_lib, team_ids, self.teams, self._cache, path)
+        
     def export_team_players_csv(self, team_id, path):
         result = pes_loader.export_team_players_csv(self.dll_lib, team_id, self.teams, self.players, self._cache, path)
         
@@ -232,6 +241,9 @@ class PESXEditor(ABC):
         
     def import_players_csv(self, path):
         result = pes_loader.import_players_csv(self.dll_lib, self.players, self._cache, path)
+        
+    def import_teams_csv(self, path):
+        result = pes_loader.import_teams_csv(self.dll_lib, self.teams, self._cache, path)
     
 class PES17Editor(PESXEditor):
     VERSION = 17
