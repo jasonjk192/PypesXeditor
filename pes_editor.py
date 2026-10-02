@@ -37,6 +37,9 @@ class PESXEditor(ABC):
         self._original_teams = None
         
         self._cache = None
+        
+        self._imported_players = None
+        self._imported_teams = None
 
         result = self._load_savefile(optional_savefile_path)
 
@@ -68,13 +71,13 @@ class PESXEditor(ABC):
         """Unload the version-specific descriptor."""
         pass
 
-    def save(self):
+    def save(self, optional_savefile_path=None):
         if self._closed:
             return
         if self.descriptor is None or self.players is None or self.teams is None:
             return
         self._update_changed_flags()
-        result = self._save_savefile()
+        result = self._save_savefile(optional_savefile_path)
         if result != pes_data.OpResult.OK:
             raise RuntimeError(f"save failed: {pes_data.OpResult(result).name}")
         self._take_snapshots()
@@ -87,12 +90,21 @@ class PESXEditor(ABC):
         if self.descriptor is not None:
             self._unload_descriptor()
         self.descriptor = None
+        
+        if self._imported_players is not None:
+            self.free_imported_players(self._imported_players)
+        
+        if self._imported_teams is not None:
+            self.free_imported_teams(self._imported_teams)
 
         if self.players is not None or self.teams is not None:
             pes_loader.unload_savefile_data(self.dll_lib, self.players, self.teams)
             
         if self._cache is not None:
             self._free_cache()
+            
+        self._imported_players = None
+        self._imported_teams = None
 
         self.players = None
         self.teams = None
@@ -239,11 +251,31 @@ class PESXEditor(ABC):
     def export_team_starting11_csv(self, team_id, path):
         result = pes_loader.export_team_starting11_csv(self.dll_lib, team_id, self.teams, self.players, self._cache, path)
         
+    def import_players_csv_auto_merge(self, path):
+        result = pes_loader.import_players_csv_auto_merge(self.dll_lib, self.players, self._cache, path)
+        
+    def import_teams_csv_auto_merge(self, path):
+        result = pes_loader.import_teams_csv_auto_merge(self.dll_lib, self.teams, self._cache, path)
+        
     def import_players_csv(self, path):
-        result = pes_loader.import_players_csv(self.dll_lib, self.players, self._cache, path)
+        if self._imported_players is not None:
+            self.free_imported_players(self._imported_players)
+            self._imported_players = None
+        self._imported_players, num_players = pes_loader.import_players_csv(self.dll_lib, path)
+        return self._imported_players, num_players
         
     def import_teams_csv(self, path):
-        result = pes_loader.import_teams_csv(self.dll_lib, self.teams, self._cache, path)
+        if self._imported_teams is not None:
+            self.free_imported_teams(self._imported_teams)
+            self._imported_teams = None
+        self._imported_teams, num_teams = pes_loader.import_teams_csv(self.dll_lib, path)
+        return self._imported_teams, num_teams
+    
+    def free_imported_players(self, players):
+        pes_loader.free_imported_players(self.dll_lib, players)  
+        
+    def free_imported_teams(self, teams):
+        pes_loader.free_imported_teams(self.dll_lib, teams)
     
 class PES17Editor(PESXEditor):
     VERSION = 17
@@ -256,3 +288,15 @@ class PES17Editor(PESXEditor):
         
     def _save_savefile(self, optional_savefile_path=None):
         return pes_loader.save_savefile17(self.dll_lib, self.descriptor, self.players, self.teams, optional_savefile_path)
+        
+class PES21Editor(PESXEditor):
+    VERSION = 21
+
+    def _load_savefile(self, optional_savefile_path=None):
+        return pes_loader.load_savefile21(self.dll_lib, optional_savefile_path)
+
+    def _unload_descriptor(self):
+        pes_loader.unload_descriptor(self.dll_lib, self.descriptor, self.VERSION)
+        
+    def _save_savefile(self, optional_savefile_path=None):
+        return pes_loader.save_savefile21(self.dll_lib, self.descriptor, self.players, self.teams, optional_savefile_path)

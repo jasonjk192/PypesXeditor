@@ -116,6 +116,8 @@ def get_descriptor(dll_lib, version):
         _get_descriptorOld(dll_lib, version)
     elif version_type == "New":
         _get_descriptorNew(dll_lib, version)
+        
+#####################################
 
 def load_savefile17(dll_lib, optional_savefile_path=None):
     dll_lib.editor_loadData17.argtypes = [
@@ -158,7 +160,47 @@ def save_savefile17(dll_lib, descriptor, players, teams, optional_savefile_path=
     if result != pes_data.OpResult.OK:
         raise RuntimeError(f"editor_saveData17 failed: {pes_data.OpResult(result).name}")
     return result
+
+def load_savefile21(dll_lib, optional_savefile_path=None):
+    dll_lib.editor_loadData21.argtypes = [
+        ctypes.c_char_p,
+        ctypes.POINTER(ctypes.POINTER(pes_data.FileDescriptorOld)),
+        ctypes.POINTER(ctypes.POINTER(pes_data.editor_player_entry)),
+        ctypes.POINTER(ctypes.c_uint32),
+        ctypes.POINTER(ctypes.POINTER(pes_data.editor_team_entry)),
+        ctypes.POINTER(ctypes.c_uint32),
+    ]
+    dll_lib.editor_loadData17.restype = ctypes.c_int
+    
+    descriptor = ctypes.POINTER(pes_data.FileDescriptorOld)()
+    players = ctypes.POINTER(pes_data.editor_player_entry)()
+    teams = ctypes.POINTER(pes_data.editor_team_entry)()
+    num_players = ctypes.c_uint32()
+    num_teams = ctypes.c_uint32()
+    path_to_encode = optional_savefile_path if optional_savefile_path is not None and _is_valid_path(optional_savefile_path) else pes_data.savefile_path
+    encoded_path = _get_encoded_path(path_to_encode)
+
+    result = dll_lib.editor_loadData21(encoded_path, ctypes.byref(descriptor), ctypes.byref(players), ctypes.byref(num_players), ctypes.byref(teams), ctypes.byref(num_teams))
+    if result != pes_data.OpResult.OK:
+        raise RuntimeError(f"editor_loadData21 failed: {pes_data.OpResult(result).name}")
+    return pes_data.SaveDataOld(descriptor=descriptor, players=players, num_players=num_players, teams=teams, num_teams=num_teams)
   
+def save_savefile21(dll_lib, descriptor, players, teams, optional_savefile_path=None):
+    dll_lib.editor_saveData21.argtypes = [
+        ctypes.c_char_p,
+        ctypes.POINTER(pes_data.FileDescriptorOld),
+        ctypes.POINTER(pes_data.editor_player_entry),
+        ctypes.POINTER(pes_data.editor_team_entry)
+    ]
+    dll_lib.editor_saveData21.restype = ctypes.c_int
+    path_to_encode = optional_savefile_path if optional_savefile_path is not None and _is_valid_path(optional_savefile_path) else pes_data.savefile_path
+    encoded_path = _get_encoded_path(path_to_encode)
+    
+    result = dll_lib.editor_saveData21(encoded_path, descriptor, players, teams)
+    if result != pes_data.OpResult.OK:
+        raise RuntimeError(f"editor_saveData21 failed: {pes_data.OpResult(result).name}")
+    return result  
+
 def unload_savefile_data(dll_lib, players, teams):
     dll_lib.editor_freeData.argtypes = [
         ctypes.POINTER(pes_data.editor_player_entry),
@@ -282,10 +324,6 @@ def export_player_csv(dll_lib, player_id, players, cache, path):
         ctypes.c_char_p,
     ]
     dll_lib.editor_export_player_csv.restype = ctypes.c_int
-    print(player_id)
-    print(players)
-    print(cache)
-    print(_get_encoded_path(path))
     result = dll_lib.editor_export_player_csv(player_id, players, cache, _get_encoded_path(path))
     if result != pes_data.OpResult.OK:
         raise RuntimeError(f"failed: {pes_data.OpResult(result).name}")
@@ -370,14 +408,68 @@ def export_team_starting11_csv(dll_lib, team_id, teams, players, cache, path):
         raise RuntimeError(f"failed: {pes_data.OpResult(result).name}")
     return result
     
-def import_players_csv(dll_lib, players, cache, path):
-    dll_lib.editor_import_players_csv.argtypes = [
+def import_players_csv_auto_merge(dll_lib, players, cache, path):
+    dll_lib.editor_import_players_csv_auto_merge.argtypes = [
         ctypes.POINTER(pes_data.editor_player_entry),
         pes_data.EditorCache, 
         ctypes.c_char_p,
     ]
-    dll_lib.editor_import_players_csv.restype = ctypes.c_int
-    result = dll_lib.editor_import_players_csv(players, cache, _get_encoded_path(path))
+    dll_lib.editor_import_players_csv_auto_merge.restype = ctypes.c_int
+    result = dll_lib.editor_import_players_csv_auto_merge(players, cache, _get_encoded_path(path))
     if result != pes_data.OpResult.OK:
         raise RuntimeError(f"failed: {pes_data.OpResult(result).name}")
     return result
+    
+def import_teams_csv_auto_merge(dll_lib, teams, cache, path):
+    dll_lib.editor_import_teams_csv_auto_merge.argtypes = [
+        ctypes.POINTER(pes_data.editor_team_entry),
+        pes_data.EditorCache, 
+        ctypes.c_char_p,
+    ]
+    dll_lib.editor_import_teams_csv_auto_merge.restype = ctypes.c_int
+    result = dll_lib.editor_import_teams_csv_auto_merge(teams, cache, _get_encoded_path(path))
+    if result != pes_data.OpResult.OK:
+        raise RuntimeError(f"failed: {pes_data.OpResult(result).name}")
+    return result
+    
+def import_players_csv(dll_lib, path):
+    dll_lib.editor_import_players_csv.argtypes = [
+        ctypes.c_char_p,
+        ctypes.POINTER(ctypes.POINTER(pes_data.editor_player_entry)),
+        ctypes.POINTER(ctypes.c_uint32),
+    ]
+    dll_lib.editor_import_teams_csv_auto_merge.restype = ctypes.c_int
+    players = ctypes.POINTER(pes_data.editor_player_entry)()
+    num_players = ctypes.c_uint32()
+    result = dll_lib.editor_import_players_csv(_get_encoded_path(path), ctypes.byref(players), ctypes.byref(num_players))
+    if result != pes_data.OpResult.OK:
+        raise RuntimeError(f"failed: {pes_data.OpResult(result).name}")
+    return players, num_players
+    
+def import_teams_csv(dll_lib, path):
+    dll_lib.editor_import_teams_csv.argtypes = [
+        ctypes.c_char_p,
+        ctypes.POINTER(ctypes.POINTER(pes_data.editor_team_entry)),
+        ctypes.POINTER(ctypes.c_uint32),
+    ]
+    dll_lib.editor_import_teams_csv.restype = ctypes.c_int
+    teams = ctypes.POINTER(pes_data.editor_team_entry)()
+    num_teams = ctypes.c_uint32()
+    result = dll_lib.editor_import_teams_csv(_get_encoded_path(path), ctypes.byref(teams), ctypes.byref(num_teams))
+    if result != pes_data.OpResult.OK:
+        raise RuntimeError(f"failed: {pes_data.OpResult(result).name}")
+    return teams, num_teams
+    
+def free_imported_players(dll_lib, players):
+    dll_lib.free_imported_players.argtypes = [
+        ctypes.POINTER(pes_data.editor_player_entry),
+    ]
+    dll_lib.free_imported_players.restype = None
+    dll_lib.free_imported_players(players)
+    
+def free_imported_teams(dll_lib, teams):
+    dll_lib.free_imported_teams.argtypes = [
+        ctypes.POINTER(pes_data.editor_team_entry),
+    ]
+    dll_lib.free_imported_teams.restype = None
+    result = dll_lib.free_imported_teams(teams)
